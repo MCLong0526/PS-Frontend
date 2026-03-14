@@ -1,0 +1,63 @@
+// userApi.ts — Fetch the authenticated user's profile from the backend.
+//
+// Uses native fetch() (not Axios) so the request is NOT intercepted by the
+// axios-mock-adapter fake backend that is still active for other endpoints.
+
+const ME_URL = "/api/users/me";
+
+export interface UserProfile {
+  id: number;
+  username: string;
+  email: string;
+  points: number;
+  phone: string | null;
+  wallet: string | null;
+  referralCode: string | null;
+  createTime: string | null;
+  updateTime: string | null;
+}
+
+interface MeApiResponse {
+  code: number;
+  msg: string;
+  data?: UserProfile;
+}
+
+/**
+ * Retrieve the logged-in user's profile from GET /api/users/me.
+ *
+ * Reads the JWT from localStorage (key: "token") and attaches it as a
+ * Bearer Authorization header.
+ *
+ * Returns the UserProfile on success.
+ * Returns null when the token is missing or the server rejects it —
+ * the CALLER is responsible for redirecting to login in that case.
+ * Throws on network-level failures so the caller can handle the error.
+ */
+export const getCurrentUser = async (): Promise<UserProfile | null> => {
+  // Read the JWT saved during login
+  const token = localStorage.getItem("token");
+
+  if (!token) {
+    // No token — signal the caller to redirect to login
+    return null;
+  }
+
+  // Call the profile endpoint with the Bearer token
+  const response = await fetch(ME_URL, {
+    method: "GET",
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+  });
+
+  const data: MeApiResponse = await response.json();
+
+  if (data.code === 200 && data.data) {
+    return data.data;
+  }
+
+  // Token was rejected — return null so the caller can redirect
+  return null;
+};

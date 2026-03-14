@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Card, CardBody, Col, Container, Input, Label, Row, Button, Form, FormFeedback, Alert, Spinner } from 'reactstrap';
+import { Card, CardBody, Col, Container, Input, Label, Row, Button, Form, FormFeedback, Spinner } from 'reactstrap';
 import ParticlesAuth from "../AuthenticationInner/ParticlesAuth";
 
 //redux
@@ -57,8 +57,8 @@ const Login = (props: any) => {
         enableReinitialize: true,
 
         initialValues: {
-            email: userLogin.email || "admin@themesbrand.com" || '',
-            password: userLogin.password || "123456" || '',
+            email: userLogin.email || '',
+            password: userLogin.password || '',
         },
         validationSchema: Yup.object({
             email: Yup.string().required("Please Enter Your Email"),
@@ -117,7 +117,6 @@ const Login = (props: any) => {
                                             <h5 className="text-primary">Welcome Back !</h5>
                                             <p className="text-muted">Sign in to continue to Velzon.</p>
                                         </div>
-                                        {error && error ? (<Alert color="danger"> {error} </Alert>) : null}
                                         <div className="p-2 mt-4">
                                             <Form
                                                 onSubmit={(e) => {

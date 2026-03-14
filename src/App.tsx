@@ -1,38 +1,34 @@
 import React from 'react';
 
-//import Scss
+// SCSS theme
 import './assets/scss/themes.scss';
 
-//imoprt Route
+// react-toastify styles (needed once, globally)
+import 'react-toastify/dist/ReactToastify.css';
+import { ToastContainer } from 'react-toastify';
+
+// Routes
 import Route from './Routes';
 
-// Import Firebase Configuration file
-// import { initFirebaseBackend } from "./helpers/firebase_helper";
-
-// Fake Backend 
+// Fake Backend (keeps all non-auth Axios calls working with mock data)
 import fakeBackend from "./helpers/AuthType/fakeBackend";
-
-// Activating fake backend
 fakeBackend();
-
-// const firebaseConfig = {
-//   apiKey: process.env.REACT_APP_APIKEY,
-//   authDomain: process.env.REACT_APP_AUTHDOMAIN,
-//   databaseURL: process.env.REACT_APP_DATABASEURL,
-//   projectId: process.env.REACT_APP_PROJECTID,
-//   storageBucket: process.env.REACT_APP_STORAGEBUCKET,
-//   messagingSenderId: process.env.REACT_APP_MESSAGINGSENDERID,
-//   appId: process.env.REACT_APP_APPID,
-//   measurementId: process.env.REACT_APP_MEASUREMENTID,
-// };
-
-// // init firebase backend
-// initFirebaseBackend(firebaseConfig);
 
 function App() {
   return (
     <React.Fragment>
       <Route />
+
+      {/* Global toast container — must be above Velzon's sidebar (z-index 1002) and overlay (1004) */}
+      <ToastContainer
+        position="top-right"
+        autoClose={3000}
+        newestOnTop
+        closeOnClick
+        pauseOnHover
+        draggable={false}
+        style={{ zIndex: 9999 }}
+      />
     </React.Fragment>
   );
 }
