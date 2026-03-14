@@ -1,11 +1,17 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { getLoggedinUser } from "../helpers/api_helper";
 
 const Navdata = () => {
     const history = useNavigate();
-    //state data
+
     const [isDashboard, setIsDashboard] = useState<boolean>(false);
     const [iscurrentState, setIscurrentState] = useState('Dashboard');
+
+    // Read role on every render — VerticalLayout calls navdata() as a plain
+    // function, so this re-runs on every parent render (i.e. every navigation).
+    const storedRole = localStorage.getItem("role") || getLoggedinUser()?.role;
+    const isAdmin = storedRole === "ADMIN";
 
     function updateIconSidebar(e: any) {
         if (e && e.target && e.target.getAttribute("sub-items")) {
@@ -27,11 +33,7 @@ const Navdata = () => {
         if (iscurrentState !== 'Dashboard') {
             setIsDashboard(false);
         }
-    }, [
-        history,
-        iscurrentState,
-        isDashboard
-    ]);
+    }, [history, iscurrentState, isDashboard]);
 
     const menuItems: any = [
         {
@@ -50,9 +52,19 @@ const Navdata = () => {
                 setIscurrentState('Dashboard');
                 updateIconSidebar(e);
                 history("/dashboard");
-            }
-        }
+            },
+        },
+        // User Management — ADMIN only
+        ...(isAdmin ? [
+            {
+                id: "admin-users",
+                label: "User Management",
+                icon: "ri-team-line",
+                link: "/admin/users",
+            },
+        ] : []),
     ];
+
     return <React.Fragment>{menuItems}</React.Fragment>;
 };
 

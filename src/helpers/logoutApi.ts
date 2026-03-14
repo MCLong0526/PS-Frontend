@@ -24,6 +24,7 @@ export const logoutWithApi = async (): Promise<void> => {
   } finally {
     // Always remove credentials from the client regardless of server response
     localStorage.removeItem("token");
+    localStorage.removeItem("role");
     sessionStorage.removeItem("authUser");
   }
 };

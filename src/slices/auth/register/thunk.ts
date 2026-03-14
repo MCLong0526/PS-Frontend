@@ -5,6 +5,12 @@ import {
   postJwtRegister,
 } from "../../../helpers/fakebackend_helper";
 
+// Real backend helper (native fetch — bypasses axios-mock-adapter)
+import { registerWithApi } from "../../../helpers/registerApi";
+
+// Velzon-styled toast notifications
+import { showToast } from "../../../helpers/appToast";
+
 // action
 import {
   registerUserSuccessful,
@@ -13,22 +19,48 @@ import {
 } from "./reducer";
 
 // initialize relavant method of both Auth
-const fireBaseBackend : any = getFirebaseBackend();
+const fireBaseBackend: any = getFirebaseBackend();
 
 // Is user register successfull then direct plot user in redux.
-export const registerUser = (user : any) => async (dispatch : any) => {
+export const registerUser = (user: any) => async (dispatch: any) => {
   try {
-    let response;
+    if (process.env.REACT_APP_DEFAULTAUTH === "api") {
+      // ── POST /api/users/register ─────────────────────────────────────────
+      let registerData;
+      try {
+        registerData = await registerWithApi({
+          username: user.username,
+          email: user.email,
+          phone: user.phone,
+          password: user.password,
+          referralCode: user.referralCode || undefined,
+        });
+      } catch {
+        const msg = "Network error: unable to reach the server. Please check your connection.";
+        dispatch(registerUserFailed({ message: msg } as any));
+        showToast.error(msg);
+        return;
+      }
 
-    if (process.env.REACT_APP_DEFAULTAUTH === "firebase") {
-      response = fireBaseBackend.registerUser(user.email, user.password);
-      // yield put(registerUserSuccessful(response));
+      if (registerData.code === 200) {
+        dispatch(registerUserSuccessful({ message: "success" } as any));
+        showToast.success("Registration successful! Redirecting to login...");
+      } else {
+        dispatch(registerUserFailed({ message: registerData.msg } as any));
+        showToast.error(registerData.msg);
+      }
+
+    } else if (process.env.REACT_APP_DEFAULTAUTH === "firebase") {
+      const response = fireBaseBackend.registerUser(user.email, user.password);
+      dispatch(registerUserSuccessful(response as any));
+
     } else if (process.env.REACT_APP_DEFAULTAUTH === "jwt") {
-      response = postJwtRegister('/post-jwt-register', user);
-      // yield put(registerUserSuccessful(response));
+      const response = postJwtRegister('/post-jwt-register', user);
+      dispatch(registerUserSuccessful(response as any));
+
     } else if (process.env.REACT_APP_API_URL) {
-      response = postFakeRegister(user);
-      const data : any = await response;
+      const response = postFakeRegister(user);
+      const data: any = await response;
 
       if (data.message === "success") {
         dispatch(registerUserSuccessful(data));
@@ -36,7 +68,7 @@ export const registerUser = (user : any) => async (dispatch : any) => {
         dispatch(registerUserFailed(data));
       }
     }
-  } catch (error : any) {
+  } catch (error: any) {
     dispatch(registerUserFailed(error));
   }
 };

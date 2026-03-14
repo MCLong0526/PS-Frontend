@@ -11,7 +11,6 @@ import { useSelector } from "react-redux";
 import { createSelector } from 'reselect';
 
 const VerticalLayout = (props : any) => {
-    const navData = navdata().props.children;
     const path = props.router.location.pathname;
 
     /*
@@ -31,6 +30,13 @@ const VerticalLayout = (props : any) => {
     const {
         leftsidbarSizeType, sidebarVisibilitytype, layoutType
     } = useSelector(selectLayoutProperties);
+
+    // Subscribe to login state so this component re-renders whenever the role
+    // changes (e.g. after ProfileDropdown fetches the user profile on refresh).
+    // navdata() is then re-called and re-reads localStorage.role immediately.
+    useSelector((state: any) => state.Login?.user?.role);
+
+    const navData = navdata().props.children;
 
     //vertical and semibox resize events
     const resizeSidebarMenu = useCallback(() => {

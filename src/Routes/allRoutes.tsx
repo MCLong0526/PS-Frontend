@@ -38,13 +38,19 @@ import Offlinepage from "../pages/AuthenticationInner/Errors/Offlinepage";
 // User Profile
 import UserProfile from "../pages/Authentication/user-profile";
 
+// Admin
+import AdminUsers from "../pages/AdminUsers";
+
 const authProtectedRoutes = [
   // dashboard
   { path: "/dashboard", component: <DashboardEcommerce /> },
   { path: "/index", component: <DashboardEcommerce /> },
-  
-  //User Profile
+
+  // User Profile
   { path: "/profile", component: <UserProfile /> },
+
+  // Admin
+  { path: "/admin/users", component: <AdminUsers /> },
 
   // this route should be at the end of all other routes
   {

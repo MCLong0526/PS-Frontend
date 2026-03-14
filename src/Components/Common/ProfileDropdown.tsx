@@ -1,26 +1,36 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Dropdown, DropdownItem, DropdownMenu, DropdownToggle } from 'reactstrap';
+import { useDispatch } from 'react-redux';
 
 import avatar1 from "../../assets/images/users/avatar-1.jpg";
 import { getCurrentUser, UserProfile } from '../../helpers/userApi';
+import { loginSuccess } from '../../slices/auth/login/reducer';
 
 const ProfileDropdown = () => {
+    const dispatch = useDispatch();
     const [profile, setProfile] = useState<UserProfile | null>(null);
     const [isProfileDropdown, setIsProfileDropdown] = useState(false);
 
     useEffect(() => {
         // Fetch the real user profile from GET /api/users/me on mount.
-        // If the token is missing or invalid, getCurrentUser() returns null
-        // and the user will be redirected to login on the next protected action.
+        // After fetching, dispatch loginSuccess so VerticalLayout (which
+        // subscribes to state.Login.user.role) re-renders immediately and
+        // shows the correct sidebar items without waiting for a page action.
         getCurrentUser()
             .then((data) => {
-                if (data) setProfile(data);
+                if (data) {
+                    setProfile(data);
+                    dispatch(loginSuccess({
+                        token: localStorage.getItem("token"),
+                        role: data.role,
+                    }));
+                }
             })
             .catch(() => {
                 // Network failure — keep showing fallback values
             });
-    }, []);
+    }, [dispatch]);
 
     const toggleProfileDropdown = () => setIsProfileDropdown(prev => !prev);
 

@@ -12,7 +12,7 @@ import * as Yup from "yup";
 import { useFormik } from "formik";
 
 // actions
-import { loginUser, socialLogin, resetLoginFlag } from "../../slices/thunks";
+import { loginUser, resetLoginFlag } from "../../slices/thunks";
 
 import logoLight from "../../assets/images/logo-light.png";
 import { createSelector } from 'reselect';
@@ -37,9 +37,7 @@ const Login = (props: any) => {
 
     const [userLogin, setUserLogin] = useState<any>([]);
     const [passwordShow, setPasswordShow] = useState<boolean>(false);
-
     const [loader, setLoader] = useState<boolean>(false);
-
 
     useEffect(() => {
         if (user && user) {
@@ -69,17 +67,6 @@ const Login = (props: any) => {
             setLoader(true)
         }
     });
-
-    const signIn = (type: any) => {
-        dispatch(socialLogin(type, props.router.navigate));
-    };
-
-
-    //for facebook and google authentication
-    const socialResponse = (type: any) => {
-        signIn(type);
-    };
-
 
     useEffect(() => {
         if (errorMsg) {
@@ -184,35 +171,6 @@ const Login = (props: any) => {
                                                     </Button>
                                                 </div>
 
-                                                <div className="mt-4 text-center">
-                                                    <div className="signin-other-title">
-                                                        <h5 className="fs-13 mb-4 title">Sign In with</h5>
-                                                    </div>
-                                                    <div>
-                                                        <Link
-                                                            to="#"
-                                                            className="btn btn-primary btn-icon me-1"
-                                                            onClick={e => {
-                                                                e.preventDefault();
-                                                                socialResponse("facebook");
-                                                            }}
-                                                        >
-                                                            <i className="ri-facebook-fill fs-16" />
-                                                        </Link>
-                                                        <Link
-                                                            to="#"
-                                                            className="btn btn-danger btn-icon me-1"
-                                                            onClick={e => {
-                                                                e.preventDefault();
-                                                                socialResponse("google");
-                                                            }}
-                                                        >
-                                                            <i className="ri-google-fill fs-16" />
-                                                        </Link>
-                                                        <Button color="dark" className="btn-icon"><i className="ri-github-fill fs-16"></i></Button>{" "}
-                                                        <Button color="info" className="btn-icon"><i className="ri-twitter-fill fs-16"></i></Button>
-                                                    </div>
-                                                </div>
                                             </Form>
                                         </div>
                                     </CardBody>

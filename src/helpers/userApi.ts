@@ -9,6 +9,7 @@ export interface UserProfile {
   id: number;
   username: string;
   email: string;
+  role: string;
   points: number;
   phone: string | null;
   wallet: string | null;
@@ -34,6 +35,60 @@ interface MeApiResponse {
  * the CALLER is responsible for redirecting to login in that case.
  * Throws on network-level failures so the caller can handle the error.
  */
+/**
+ * Fetch the authenticated user's referral QR code from GET /api/users/my-qr.
+ *
+ * Returns an object URL (blob URL) that can be set as an <img> src.
+ * Returns null when the token is missing, the request fails, or the response
+ * is not an image.  The caller is responsible for revoking the object URL
+ * (URL.revokeObjectURL) when the component unmounts.
+ */
+export const fetchReferralQR = async (): Promise<string | null> => {
+  const token = localStorage.getItem("token");
+  if (!token) return null;
+
+  try {
+    const response = await fetch("/api/users/my-qr", {
+      headers: {
+        "Authorization": `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) return null;
+
+    const blob = await response.blob();
+    return URL.createObjectURL(blob);
+  } catch {
+    return null;
+  }
+};
+
+export interface WalletHistoryItem {
+  createTime: string;
+  type: string;
+  description: string;
+  amount: number;
+}
+
+export interface WalletHistoryResponse {
+  code: number;
+  msg: string;
+  data: WalletHistoryItem[];
+}
+
+export const fetchWalletHistory = async (): Promise<WalletHistoryResponse | null> => {
+  const token = localStorage.getItem("token");
+  if (!token) return null;
+
+  const response = await fetch("/api/wallet/history", {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+  });
+  return response.json();
+};
+
 export const getCurrentUser = async (): Promise<UserProfile | null> => {
   // Read the JWT saved during login
   const token = localStorage.getItem("token");
@@ -55,6 +110,10 @@ export const getCurrentUser = async (): Promise<UserProfile | null> => {
   const data: MeApiResponse = await response.json();
 
   if (data.code === 200 && data.data) {
+    // Keep localStorage role in sync so sidebar always reflects the correct role.
+    if (data.data.role) {
+      localStorage.setItem("role", data.data.role);
+    }
     return data.data;
   }
 

@@ -12,10 +12,22 @@ export interface LoginApiPayload {
   password: string;
 }
 
+export interface LoginUserData {
+  id: number;
+  username: string;
+  email: string;
+  role: string;
+  phone: string | null;
+  points: number;
+  wallet: number | null;
+  referralCode: string | null;
+}
+
 export interface LoginApiResponse {
-  code: number;  // HTTP-style status code returned in the body (e.g. 200, 401)
-  msg: string;   // Human-readable message (e.g. "success" or "Invalid password")
+  code: number;   // HTTP-style status code returned in the body (e.g. 200, 401)
+  msg: string;    // Human-readable message (e.g. "success" or "Invalid password")
   token?: string; // JWT token, present only on success
+  data?: LoginUserData; // Full user object returned on success
 }
 
 /**

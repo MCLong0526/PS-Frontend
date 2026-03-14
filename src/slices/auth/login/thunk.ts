@@ -31,9 +31,22 @@ export const loginUser = (user: any, history: any) => async (dispatch: any) => {
         return;
       }
 
-      // Persist the JWT for authenticated requests
-      localStorage.setItem("token", loginData.token!);
-      const authUser = { token: loginData.token };
+      // Persist the JWT for authenticated requests.
+      // Guard: only store a real token string, never the literal "null".
+      if (loginData.token) {
+        localStorage.setItem("token", loginData.token);
+      }
+
+      // Store role in localStorage so sidebar and other components can read it
+      // without an extra API call, even after a page refresh.
+      if (loginData.data?.role) {
+        localStorage.setItem("role", loginData.data.role);
+      }
+
+      const authUser = {
+        token: loginData.token || null,
+        role:  loginData.data?.role || null,
+      };
       sessionStorage.setItem("authUser", JSON.stringify(authUser));
 
       dispatch(loginSuccess(authUser));
