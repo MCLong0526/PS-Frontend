@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   Container,
   Row,
@@ -17,15 +17,38 @@ import {
   UserProfile as UserProfileData, WalletHistoryItem,
 } from "../../helpers/userApi";
 
+const PAGE_SIZE = 10;
+
+const fmtDate = (d: string) => {
+  if (!d) return "—";
+  try {
+    return new Date(d).toLocaleString("en-MY", {
+      year: "numeric", month: "short", day: "numeric",
+      hour: "2-digit", minute: "2-digit", hour12: false,
+    });
+  } catch { return d; }
+};
+
 const UserProfile = () => {
   const [profile, setProfile] = useState<UserProfileData | null>(null);
   const [loading, setLoading] = useState(true);
   const [qrSrc, setQrSrc] = useState<string | null>(null);
   const [qrLoading, setQrLoading] = useState(true);
   const [copied, setCopied] = useState(false);
-  const [walletHistory, setWalletHistory] = useState<WalletHistoryItem[]>([]);
-  const [historyLoading, setHistoryLoading] = useState(true);
   const qrBlobUrl = useRef<string | null>(null);
+
+  // Wallet history state
+  const [walletHistory, setWalletHistory]       = useState<WalletHistoryItem[]>([]);
+  const [historyLoading, setHistoryLoading]     = useState(true);
+  const [page, setPage]                         = useState(0);
+  const [totalPages, setTotalPages]             = useState(0);
+  const [totalElements, setTotalElements]       = useState(0);
+
+  // Filter state — held separately so Search/Reset controls when they take effect
+  const [startDateInput, setStartDateInput]     = useState("");
+  const [endDateInput, setEndDateInput]         = useState("");
+  const [appliedStart, setAppliedStart]         = useState("");
+  const [appliedEnd, setAppliedEnd]             = useState("");
 
   useEffect(() => {
     getCurrentUser()
@@ -41,19 +64,67 @@ const UserProfile = () => {
       .catch(() => {})
       .finally(() => setQrLoading(false));
 
-    fetchWalletHistory()
-      .then((res) => {
-        if (res?.code === 200 && Array.isArray(res.data)) {
-          setWalletHistory(res.data);
-        }
-      })
-      .catch(() => {})
-      .finally(() => setHistoryLoading(false));
-
     return () => {
       if (qrBlobUrl.current) URL.revokeObjectURL(qrBlobUrl.current);
     };
   }, []);
+
+  const loadHistory = useCallback(async (targetPage: number, start: string, end: string) => {
+    setHistoryLoading(true);
+    try {
+      const res = await fetchWalletHistory({
+        page: targetPage,
+        size: PAGE_SIZE,
+        startDate: start || undefined,
+        endDate: end || undefined,
+      });
+      if (res?.code === 200 && res.data) {
+        setWalletHistory(res.data.content);
+        setTotalPages(res.data.totalPages);
+        setTotalElements(res.data.totalElements);
+      } else {
+        setWalletHistory([]);
+        setTotalPages(0);
+        setTotalElements(0);
+      }
+    } catch {
+      setWalletHistory([]);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, []);
+
+  // Initial load
+  useEffect(() => {
+    loadHistory(0, "", "");
+  }, [loadHistory]);
+
+  const handleSearch = () => {
+    setPage(0);
+    setAppliedStart(startDateInput);
+    setAppliedEnd(endDateInput);
+    loadHistory(0, startDateInput, endDateInput);
+  };
+
+  const handleReset = () => {
+    setStartDateInput("");
+    setEndDateInput("");
+    setAppliedStart("");
+    setAppliedEnd("");
+    setPage(0);
+    loadHistory(0, "", "");
+  };
+
+  const handlePageChange = (p: number) => {
+    setPage(p);
+    loadHistory(p, appliedStart, appliedEnd);
+  };
+
+  const pageNumbers = () => {
+    if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i);
+    const start = Math.max(0, Math.min(page - 2, totalPages - 5));
+    return Array.from({ length: Math.min(5, totalPages) }, (_, i) => start + i);
+  };
 
   const referralLink = profile?.referralCode
     ? `${window.location.origin}/register?ref=${profile.referralCode}`
@@ -298,58 +369,139 @@ const UserProfile = () => {
                     <i className="ri-exchange-funds-line me-2 text-primary align-middle"></i>
                     Wallet Activity
                   </h5>
-                  {walletHistory.length > 0 && (
+                  {totalElements > 0 && (
                     <span className="badge bg-primary-subtle text-primary fs-12">
-                      {walletHistory.length} transaction{walletHistory.length !== 1 ? "s" : ""}
+                      {totalElements} transaction{totalElements !== 1 ? "s" : ""}
                     </span>
                   )}
                 </CardHeader>
                 <CardBody>
+
+                  {/* Filter bar */}
+                  <Row className="g-2 mb-3 align-items-end">
+                    <Col xs={12} sm={4} md={3}>
+                      <label className="form-label text-muted fs-12 text-uppercase fw-medium mb-1">
+                        Start Date
+                      </label>
+                      <input
+                        type="date"
+                        className="form-control form-control-sm"
+                        value={startDateInput}
+                        max={endDateInput || undefined}
+                        onChange={(e) => setStartDateInput(e.target.value)}
+                      />
+                    </Col>
+                    <Col xs={12} sm={4} md={3}>
+                      <label className="form-label text-muted fs-12 text-uppercase fw-medium mb-1">
+                        End Date
+                      </label>
+                      <input
+                        type="date"
+                        className="form-control form-control-sm"
+                        value={endDateInput}
+                        min={startDateInput || undefined}
+                        onChange={(e) => setEndDateInput(e.target.value)}
+                      />
+                    </Col>
+                    <Col xs="auto">
+                      <Button color="primary" size="sm" onClick={handleSearch}>
+                        <i className="ri-search-line me-1"></i>Search
+                      </Button>
+                    </Col>
+                    <Col xs="auto">
+                      <Button color="light" size="sm" onClick={handleReset}>
+                        <i className="ri-refresh-line me-1"></i>Reset
+                      </Button>
+                    </Col>
+                  </Row>
+
+                  {/* Table */}
                   {historyLoading ? (
-                    <div className="text-center py-4">
+                    <div className="text-center py-5">
                       <Spinner color="primary" />
                     </div>
                   ) : walletHistory.length === 0 ? (
                     <div className="text-center py-5 text-muted">
                       <i className="ri-inbox-line fs-1 d-block mb-2 opacity-50"></i>
-                      <p className="fs-14 mb-0">No wallet activity yet.</p>
+                      <p className="fs-14 mb-0">No wallet activity found.</p>
                     </div>
                   ) : (
-                    <div className="table-responsive">
-                      <Table className="table table-hover table-striped align-middle mb-0">
-                        <thead className="table-light">
-                          <tr>
-                            <th className="text-muted fw-medium">Date</th>
-                            <th className="text-muted fw-medium">Type</th>
-                            <th className="text-muted fw-medium">Description</th>
-                            <th className="text-muted fw-medium text-end">Amount</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {walletHistory.map((tx, i) => {
-                            const amt = parseFloat(String(tx.amount));
-                            const isPositive = amt >= 0;
-                            return (
-                              <tr key={i}>
-                                <td className="text-muted fs-13">{tx.createTime || "—"}</td>
-                                <td>
-                                  <span className="badge bg-info-subtle text-info fs-11">
-                                    {tx.type}
-                                  </span>
-                                </td>
-                                <td className="text-muted fs-13">{tx.description || "—"}</td>
-                                <td className="text-end">
-                                  <span className={`fw-semibold fs-13 ${isPositive ? "text-success" : "text-danger"}`}>
-                                    {isPositive ? "+" : ""}RM {Math.abs(amt).toFixed(2)}
-                                  </span>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </Table>
-                    </div>
+                    <>
+                      <div className="table-responsive">
+                        <Table className="table table-hover table-striped align-middle mb-0">
+                          <thead className="table-light">
+                            <tr>
+                              <th className="text-muted fw-medium" style={{ width: 40 }}>#</th>
+                              <th className="text-muted fw-medium">Date</th>
+                              <th className="text-muted fw-medium">Type</th>
+                              <th className="text-muted fw-medium">Description</th>
+                              <th className="text-muted fw-medium text-end">Amount</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {walletHistory.map((tx, i) => {
+                              const amt = parseFloat(String(tx.amount));
+                              const isPositive = amt >= 0;
+                              return (
+                                <tr key={i}>
+                                  <td className="text-muted fs-12">{page * PAGE_SIZE + i + 1}</td>
+                                  <td className="text-muted fs-13">{fmtDate(tx.createTime)}</td>
+                                  <td>
+                                    <span className="badge bg-info-subtle text-info fs-11">
+                                      {tx.type}
+                                    </span>
+                                  </td>
+                                  <td className="text-muted fs-13">{tx.description || "—"}</td>
+                                  <td className="text-end">
+                                    <span className={`fw-semibold fs-13 ${isPositive ? "text-success" : "text-danger"}`}>
+                                      {isPositive ? "+" : ""}RM {Math.abs(amt).toFixed(2)}
+                                    </span>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </Table>
+                      </div>
+
+                      {/* Pagination */}
+                      {totalPages > 1 && (
+                        <Row className="align-items-center mt-3 g-3">
+                          <div className="col-sm">
+                            <p className="text-muted mb-0 fs-13">
+                              Showing{" "}
+                              <span className="fw-semibold">
+                                {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, totalElements)}
+                              </span>{" "}
+                              of <span className="fw-semibold">{totalElements}</span> transactions
+                            </p>
+                          </div>
+                          <div className="col-sm-auto">
+                            <ul className="pagination pagination-separated pagination-sm justify-content-center justify-content-sm-end mb-0">
+                              <li className={page === 0 ? "page-item disabled" : "page-item"}>
+                                <button className="page-link" onClick={() => handlePageChange(page - 1)}>
+                                  <i className="ri-arrow-left-s-line"></i>
+                                </button>
+                              </li>
+                              {pageNumbers().map((i) => (
+                                <li key={i} className={page === i ? "page-item active" : "page-item"}>
+                                  <button className="page-link" onClick={() => handlePageChange(i)}>
+                                    {i + 1}
+                                  </button>
+                                </li>
+                              ))}
+                              <li className={page >= totalPages - 1 ? "page-item disabled" : "page-item"}>
+                                <button className="page-link" onClick={() => handlePageChange(page + 1)}>
+                                  <i className="ri-arrow-right-s-line"></i>
+                                </button>
+                              </li>
+                            </ul>
+                          </div>
+                        </Row>
+                      )}
+                    </>
                   )}
+
                 </CardBody>
               </Card>
             </Col>

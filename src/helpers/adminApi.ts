@@ -17,11 +17,12 @@ export interface AdminUser {
   username: string;
   email: string;
   phone: string | null;
-  wallet: string | null;
+  wallet: number | string | null;
   points: number;
   role: string;
   status: string;
   referralCode: string | null;
+  invitedBy: number | null;
   createTime: string | null;
   updateTime: string | null;
 }
@@ -59,10 +60,25 @@ export interface WalletTransaction {
   description: string;
 }
 
+export interface WalletLogsPage {
+  content: WalletTransaction[];
+  totalPages: number;
+  totalElements: number;
+  number: number;
+  size: number;
+}
+
 export interface WalletLogsResponse {
   code: number;
   msg: string;
-  data: WalletTransaction[];
+  data: WalletLogsPage | WalletTransaction[];  // handles both paginated and flat response
+}
+
+export interface WalletLogsParams {
+  page?: number;
+  size?: number;
+  startDate?: string;
+  endDate?: string;
 }
 
 // ── API calls ─────────────────────────────────────────────────────────────────
@@ -101,8 +117,16 @@ export const deactivateAdminUser = async (id: number): Promise<ApiResult> => {
   return response.json();
 };
 
-export const getWalletLogs = async (userId: number): Promise<WalletLogsResponse> => {
-  const response = await fetch(`${BASE}/${userId}/wallet`, {
+export const getWalletLogs = async (
+  userId: number,
+  params: WalletLogsParams = {}
+): Promise<WalletLogsResponse> => {
+  const { page = 0, size = 10, startDate, endDate } = params;
+  const query = new URLSearchParams({ page: String(page), size: String(size) });
+  if (startDate) query.set("startDate", startDate);
+  if (endDate) query.set("endDate", endDate);
+
+  const response = await fetch(`${BASE}/${userId}/wallet?${query}`, {
     headers: authHeaders(),
   });
   return response.json();

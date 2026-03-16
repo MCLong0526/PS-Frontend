@@ -54,13 +54,47 @@ const Navdata = () => {
                 history("/dashboard");
             },
         },
-        // User Management — ADMIN only
+        // ADMIN-only items
         ...(isAdmin ? [
             {
                 id: "admin-users",
                 label: "User Management",
                 icon: "ri-team-line",
                 link: "/admin/users",
+            },
+            {
+                id: "admin-products",
+                label: "Product Management",
+                icon: "ri-store-2-line",
+                link: "/admin/products",
+            },
+            {
+                id: "admin-requests",
+                label: "Request Management",
+                icon: "ri-truck-line",
+                link: "/admin/requests",
+            },
+            {
+                id: "admin-payment-settings",
+                label: "Payment Settings",
+                icon: "ri-bank-line",
+                link: "/admin/payment-settings",
+            },
+        ] : []),
+
+        // CUSTOMER-only items
+        ...(!isAdmin ? [
+            {
+                id: "products",
+                label: "Products",
+                icon: "ri-store-2-line",
+                link: "/products",
+            },
+            {
+                id: "my-requests",
+                label: "My Requests",
+                icon: "ri-list-check-2",
+                link: "/my-requests",
             },
         ] : []),
     ];

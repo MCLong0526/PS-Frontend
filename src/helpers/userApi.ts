@@ -70,17 +70,39 @@ export interface WalletHistoryItem {
   amount: number;
 }
 
+export interface WalletHistoryPage {
+  content: WalletHistoryItem[];
+  totalPages: number;
+  totalElements: number;
+  number: number;
+  size: number;
+}
+
 export interface WalletHistoryResponse {
   code: number;
   msg: string;
-  data: WalletHistoryItem[];
+  data: WalletHistoryPage;
 }
 
-export const fetchWalletHistory = async (): Promise<WalletHistoryResponse | null> => {
+export interface WalletHistoryParams {
+  page?: number;
+  size?: number;
+  startDate?: string;
+  endDate?: string;
+}
+
+export const fetchWalletHistory = async (
+  params: WalletHistoryParams = {}
+): Promise<WalletHistoryResponse | null> => {
   const token = localStorage.getItem("token");
   if (!token) return null;
 
-  const response = await fetch("/api/wallet/history", {
+  const { page = 0, size = 10, startDate, endDate } = params;
+  const query = new URLSearchParams({ page: String(page), size: String(size) });
+  if (startDate) query.set("startDate", startDate);
+  if (endDate) query.set("endDate", endDate);
+
+  const response = await fetch(`/api/wallet/history?${query.toString()}`, {
     headers: {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",

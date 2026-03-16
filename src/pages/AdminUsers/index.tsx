@@ -13,9 +13,11 @@ import {
   getAdminUsers, updateAdminUser, deactivateAdminUser, getWalletLogs,
   AdminUser, WalletTransaction,
 } from "../../helpers/adminApi";
+
 import { showToast } from "../../helpers/appToast";
 
 const PAGE_SIZE = 10;
+const TX_PAGE_SIZE = 10;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -82,8 +84,18 @@ const AdminUsers = () => {
   const [viewUser, setViewUser]       = useState<AdminUser | null>(null);
   const [viewOpen, setViewOpen]       = useState(false);
   const [copiedLink, setCopiedLink]   = useState(false);
-  const [walletLogs, setWalletLogs]   = useState<WalletTransaction[]>([]);
-  const [logsLoading, setLogsLoading] = useState(false);
+
+  // Transaction logs modal
+  const [txLogsOpen, setTxLogsOpen]         = useState(false);
+  const [walletLogs, setWalletLogs]         = useState<WalletTransaction[]>([]);
+  const [logsLoading, setLogsLoading]       = useState(false);
+  const [txPage, setTxPage]                 = useState(0);
+  const [txTotalPages, setTxTotalPages]     = useState(0);
+  const [txTotalElements, setTxTotalElements] = useState(0);
+  const [txStartInput, setTxStartInput]     = useState("");
+  const [txEndInput, setTxEndInput]         = useState("");
+  const [txAppliedStart, setTxAppliedStart] = useState("");
+  const [txAppliedEnd, setTxAppliedEnd]     = useState("");
 
   // Edit modal
   const [editUser, setEditUser]       = useState<AdminUser | null>(null);
@@ -126,22 +138,91 @@ const AdminUsers = () => {
 
   // ── View modal ──────────────────────────────────────────────────────────────
 
-  const openView = async (user: AdminUser) => {
+  const openView = (user: AdminUser) => {
     setViewUser(user);
     setViewOpen(true);
     setCopiedLink(false);
-    setWalletLogs([]);
-    setLogsLoading(true);
-    try {
-      const res = await getWalletLogs(user.id);
-      if (res.code === 200 && Array.isArray(res.data)) {
-        setWalletLogs(res.data);
-      }
-    } catch { /* show empty table */ }
-    finally { setLogsLoading(false); }
   };
 
   const closeView = () => { setViewOpen(false); setViewUser(null); };
+
+  // ── Transaction logs modal ───────────────────────────────────────────────────
+
+  const loadTxLogs = useCallback(async (
+    userId: number, targetPage: number, start: string, end: string
+  ) => {
+    setLogsLoading(true);
+    try {
+      const res = await getWalletLogs(userId, {
+        page: targetPage,
+        size: TX_PAGE_SIZE,
+        startDate: start || undefined,
+        endDate: end || undefined,
+      });
+      if (res.code === 200 && res.data) {
+        // Handle both paginated { content, totalPages } and legacy flat array
+        if (Array.isArray(res.data)) {
+          setWalletLogs(res.data as WalletTransaction[]);
+          setTxTotalPages(1);
+          setTxTotalElements((res.data as WalletTransaction[]).length);
+        } else {
+          const page = res.data as any;
+          setWalletLogs(page.content ?? []);
+          setTxTotalPages(page.totalPages ?? 1);
+          setTxTotalElements(page.totalElements ?? 0);
+        }
+      } else {
+        setWalletLogs([]);
+        setTxTotalPages(0);
+        setTxTotalElements(0);
+      }
+    } catch {
+      setWalletLogs([]);
+    } finally {
+      setLogsLoading(false);
+    }
+  }, []);
+
+  const openTxLogs = (user: AdminUser) => {
+    setTxPage(0);
+    setTxStartInput("");
+    setTxEndInput("");
+    setTxAppliedStart("");
+    setTxAppliedEnd("");
+    setWalletLogs([]);
+    setTxLogsOpen(true);
+    loadTxLogs(user.id, 0, "", "");
+  };
+
+  const handleTxSearch = () => {
+    if (!viewUser) return;
+    setTxPage(0);
+    setTxAppliedStart(txStartInput);
+    setTxAppliedEnd(txEndInput);
+    loadTxLogs(viewUser.id, 0, txStartInput, txEndInput);
+  };
+
+  const handleTxReset = () => {
+    if (!viewUser) return;
+    setTxStartInput("");
+    setTxEndInput("");
+    setTxAppliedStart("");
+    setTxAppliedEnd("");
+    setTxPage(0);
+    loadTxLogs(viewUser.id, 0, "", "");
+  };
+
+  const handleTxPageChange = (p: number) => {
+    if (!viewUser) return;
+    setTxPage(p);
+    loadTxLogs(viewUser.id, p, txAppliedStart, txAppliedEnd);
+  };
+
+  const txPageNumbers = () => {
+    if (txTotalPages <= 7) return Array.from({ length: txTotalPages }, (_, i) => i);
+    const start = Math.max(0, Math.min(txPage - 2, txTotalPages - 5));
+    return Array.from({ length: Math.min(5, txTotalPages) }, (_, i) => start + i);
+  };
 
   const handleCopyLink = (code: string | null) => {
     const link = buildReferralLink(code);
@@ -439,7 +520,18 @@ const AdminUsers = () => {
                 <Row className="g-3">
                   <Col sm={6}>
                     <div className="border rounded p-3 bg-light h-100">
-                      <p className="text-muted fs-12 text-uppercase fw-medium mb-2">Wallet Balance</p>
+                      <div className="d-flex align-items-start justify-content-between mb-2">
+                        <p className="text-muted fs-12 text-uppercase fw-medium mb-0">Wallet Balance</p>
+                        <Button
+                          color="primary"
+                          size="sm"
+                          outline
+                          className="py-0 px-2 fs-11"
+                          onClick={() => openTxLogs(viewUser)}
+                        >
+                          <i className="ri-exchange-funds-line me-1"></i>Transaction Logs
+                        </Button>
+                      </div>
                       <h2 className="fw-bold text-success mb-0">
                         RM <span>{fmtWallet(viewUser.wallet)}</span>
                       </h2>
@@ -517,51 +609,6 @@ const AdminUsers = () => {
                 </Row>
               </div>
 
-              {/* ── Section 4: Wallet Transaction Logs ──────────────────── */}
-              <div className="p-4">
-                <p className="text-muted fs-11 text-uppercase fw-medium mb-3">
-                  <i className="ri-exchange-funds-line me-1"></i>Wallet Transaction Logs
-                </p>
-                {logsLoading ? (
-                  <div className="text-center py-4"><Spinner color="primary" size="sm" /></div>
-                ) : walletLogs.length === 0 ? (
-                  <div className="text-center py-4 text-muted">
-                    <i className="ri-inbox-line fs-2 d-block mb-1 opacity-50"></i>
-                    <span className="fs-13">No transactions found</span>
-                  </div>
-                ) : (
-                  <div className="table-responsive">
-                    <Table className="table-sm table-hover align-middle mb-0">
-                      <thead className="table-light">
-                        <tr>
-                          <th className="text-muted fs-12">Date</th>
-                          <th className="text-muted fs-12">Amount</th>
-                          <th className="text-muted fs-12">Type</th>
-                          <th className="text-muted fs-12">Description</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {walletLogs.map((tx, i) => (
-                          <tr key={tx.id ?? i}>
-                            <td className="text-muted fs-13">{fmtDate(tx.createTime)}</td>
-                            <td>
-                              <span className={`fw-semibold fs-13 ${tx.amount >= 0 ? "text-success" : "text-danger"}`}>
-                                {tx.amount >= 0 ? "+" : ""}RM {Math.abs(tx.amount).toFixed(2)}
-                              </span>
-                            </td>
-                            <td>
-                              <span className="badge bg-info-subtle text-info fs-11">
-                                {tx.type}
-                              </span>
-                            </td>
-                            <td className="text-muted fs-13">{tx.description || "—"}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </Table>
-                  </div>
-                )}
-              </div>
             </>
           )}
         </ModalBody>
@@ -575,14 +622,177 @@ const AdminUsers = () => {
       </Modal>
 
       {/* ══════════════════════════════════════════════════════════════════════
+          TRANSACTION LOGS MODAL
+      ══════════════════════════════════════════════════════════════════════ */}
+      <Modal isOpen={txLogsOpen} toggle={() => setTxLogsOpen(false)} centered size="lg" scrollable>
+        <ModalHeader toggle={() => setTxLogsOpen(false)} className="border-bottom-dashed">
+          <i className="ri-exchange-funds-line me-2 text-primary align-middle"></i>
+          Wallet Transaction Logs
+        </ModalHeader>
+
+        <ModalBody className="p-0">
+          {viewUser && (
+            <>
+              {/* User summary strip */}
+              <div className="px-4 py-3 bg-light border-bottom d-flex align-items-center gap-3">
+                <div className="avatar-sm flex-shrink-0">
+                  <div className="avatar-title bg-primary-subtle text-primary rounded-circle fw-bold fs-16">
+                    {viewUser.username?.charAt(0).toUpperCase() || "?"}
+                  </div>
+                </div>
+                <div className="flex-grow-1 min-w-0">
+                  <p className="fw-semibold mb-0 text-truncate">{viewUser.username}</p>
+                  <p className="text-muted mb-0 fs-12 text-truncate">{viewUser.email}</p>
+                </div>
+                <div className="text-end flex-shrink-0">
+                  <p className="text-muted fs-11 text-uppercase fw-medium mb-0">Wallet Balance</p>
+                  <p className="fw-bold text-success mb-0 fs-15">RM {fmtWallet(viewUser.wallet)}</p>
+                </div>
+              </div>
+
+              <div className="p-4">
+                {/* Filter bar */}
+                <Row className="g-2 mb-3 align-items-end">
+                  <Col xs={12} sm={4}>
+                    <label className="form-label text-muted fs-11 text-uppercase fw-medium mb-1">
+                      Start Date
+                    </label>
+                    <input
+                      type="date"
+                      className="form-control form-control-sm"
+                      value={txStartInput}
+                      max={txEndInput || undefined}
+                      onChange={(e) => setTxStartInput(e.target.value)}
+                    />
+                  </Col>
+                  <Col xs={12} sm={4}>
+                    <label className="form-label text-muted fs-11 text-uppercase fw-medium mb-1">
+                      End Date
+                    </label>
+                    <input
+                      type="date"
+                      className="form-control form-control-sm"
+                      value={txEndInput}
+                      min={txStartInput || undefined}
+                      onChange={(e) => setTxEndInput(e.target.value)}
+                    />
+                  </Col>
+                  <Col xs="auto">
+                    <Button color="primary" size="sm" onClick={handleTxSearch}>
+                      <i className="ri-search-line me-1"></i>Search
+                    </Button>
+                  </Col>
+                  <Col xs="auto">
+                    <Button color="light" size="sm" onClick={handleTxReset}>
+                      <i className="ri-refresh-line me-1"></i>Reset
+                    </Button>
+                  </Col>
+                </Row>
+
+                {/* Table */}
+                {logsLoading ? (
+                  <div className="text-center py-5">
+                    <Spinner color="primary" />
+                  </div>
+                ) : walletLogs.length === 0 ? (
+                  <div className="text-center py-5 text-muted">
+                    <i className="ri-inbox-line fs-2 d-block mb-2 opacity-50"></i>
+                    <span className="fs-13">No transactions found</span>
+                  </div>
+                ) : (
+                  <>
+                    <div className="table-responsive">
+                      <Table className="table-sm table-hover table-striped align-middle mb-0">
+                        <thead className="table-light">
+                          <tr>
+                            <th className="text-muted fs-12" style={{ width: 40 }}>#</th>
+                            <th className="text-muted fs-12">Date</th>
+                            <th className="text-muted fs-12">Amount</th>
+                            <th className="text-muted fs-12">Type</th>
+                            <th className="text-muted fs-12">Description</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {walletLogs.map((tx, i) => (
+                            <tr key={tx.id ?? i}>
+                              <td className="text-muted fs-12">{txPage * TX_PAGE_SIZE + i + 1}</td>
+                              <td className="text-muted fs-13">{fmtDate(tx.createTime)}</td>
+                              <td>
+                                <span className={`fw-semibold fs-13 ${tx.amount >= 0 ? "text-success" : "text-danger"}`}>
+                                  {tx.amount >= 0 ? "+" : ""}RM {Math.abs(tx.amount).toFixed(2)}
+                                </span>
+                              </td>
+                              <td>
+                                <span className="badge bg-info-subtle text-info fs-11">
+                                  {tx.type}
+                                </span>
+                              </td>
+                              <td className="text-muted fs-13">{tx.description || "—"}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </Table>
+                    </div>
+
+                    {/* Pagination */}
+                    {txTotalPages > 1 && (
+                      <Row className="align-items-center mt-3 g-3">
+                        <div className="col-sm">
+                          <p className="text-muted mb-0 fs-12">
+                            Showing{" "}
+                            <span className="fw-semibold">
+                              {txPage * TX_PAGE_SIZE + 1}–{Math.min((txPage + 1) * TX_PAGE_SIZE, txTotalElements)}
+                            </span>{" "}
+                            of <span className="fw-semibold">{txTotalElements}</span>
+                          </p>
+                        </div>
+                        <div className="col-sm-auto">
+                          <ul className="pagination pagination-separated pagination-sm justify-content-center justify-content-sm-end mb-0">
+                            <li className={txPage === 0 ? "page-item disabled" : "page-item"}>
+                              <button className="page-link" onClick={() => handleTxPageChange(txPage - 1)}>
+                                <i className="ri-arrow-left-s-line"></i>
+                              </button>
+                            </li>
+                            {txPageNumbers().map((i) => (
+                              <li key={i} className={txPage === i ? "page-item active" : "page-item"}>
+                                <button className="page-link" onClick={() => handleTxPageChange(i)}>{i + 1}</button>
+                              </li>
+                            ))}
+                            <li className={txPage >= txTotalPages - 1 ? "page-item disabled" : "page-item"}>
+                              <button className="page-link" onClick={() => handleTxPageChange(txPage + 1)}>
+                                <i className="ri-arrow-right-s-line"></i>
+                              </button>
+                            </li>
+                          </ul>
+                        </div>
+                      </Row>
+                    )}
+                  </>
+                )}
+              </div>
+            </>
+          )}
+        </ModalBody>
+
+        <ModalFooter className="border-top-dashed">
+          <p className="text-muted fs-12 mb-0 me-auto">
+            {txTotalElements > 0 && (
+              <>{txTotalElements} transaction{txTotalElements !== 1 ? "s" : ""}</>
+            )}
+          </p>
+          <Button color="light" onClick={() => setTxLogsOpen(false)}>Close</Button>
+        </ModalFooter>
+      </Modal>
+
+      {/* ══════════════════════════════════════════════════════════════════════
           EDIT MODAL
       ══════════════════════════════════════════════════════════════════════ */}
-      <Modal isOpen={editOpen} toggle={() => !editLoading && setEditOpen(false)} centered>
+      <Modal isOpen={editOpen} toggle={() => !editLoading && setEditOpen(false)} centered scrollable>
         <ModalHeader toggle={() => !editLoading && setEditOpen(false)} className="border-bottom-dashed">
           <i className="ri-edit-line me-2 text-primary align-middle"></i>Edit User
         </ModalHeader>
-        <Form onSubmit={(e) => { e.preventDefault(); editFormik.handleSubmit(); }}>
-          <ModalBody className="p-4">
+        <ModalBody className="p-4">
+          <Form id="edit-user-form" onSubmit={(e) => { e.preventDefault(); editFormik.handleSubmit(); }}>
             {editUser && (
               <div className="d-flex align-items-center gap-3 mb-4 p-3 bg-light rounded">
                 <div className="avatar-sm flex-shrink-0">
@@ -625,14 +835,14 @@ const AdminUsers = () => {
                 onChange={editFormik.handleChange} onBlur={editFormik.handleBlur}
                 value={editFormik.values.phone} />
             </div>
-          </ModalBody>
-          <ModalFooter className="border-top-dashed">
-            <Button color="light" type="button" onClick={() => setEditOpen(false)} disabled={editLoading}>Cancel</Button>
-            <Button color="primary" type="submit" disabled={editLoading}>
-              {editLoading && <Spinner size="sm" className="me-1" />}Save Changes
-            </Button>
-          </ModalFooter>
-        </Form>
+          </Form>
+        </ModalBody>
+        <ModalFooter className="border-top-dashed">
+          <Button color="light" type="button" onClick={() => setEditOpen(false)} disabled={editLoading}>Cancel</Button>
+          <Button color="primary" type="submit" form="edit-user-form" disabled={editLoading}>
+            {editLoading && <Spinner size="sm" className="me-1" />}Save Changes
+          </Button>
+        </ModalFooter>
       </Modal>
 
       {/* ══════════════════════════════════════════════════════════════════════

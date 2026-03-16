@@ -40,6 +40,13 @@ import UserProfile from "../pages/Authentication/user-profile";
 
 // Admin
 import AdminUsers from "../pages/AdminUsers";
+import AdminPaymentSettings from "../pages/AdminPaymentSettings";
+
+// Products & Requests
+import Products from "../pages/Products";
+import MyRequests from "../pages/MyRequests";
+import AdminProducts from "../pages/AdminProducts";
+import AdminRequests from "../pages/AdminRequests";
 
 const authProtectedRoutes = [
   // dashboard
@@ -50,7 +57,14 @@ const authProtectedRoutes = [
   { path: "/profile", component: <UserProfile /> },
 
   // Admin
-  { path: "/admin/users", component: <AdminUsers /> },
+  { path: "/admin/users",            component: <AdminUsers /> },
+  { path: "/admin/products",         component: <AdminProducts /> },
+  { path: "/admin/requests",         component: <AdminRequests /> },
+  { path: "/admin/payment-settings", component: <AdminPaymentSettings /> },
+
+  // Customer
+  { path: "/products",        component: <Products /> },
+  { path: "/my-requests",     component: <MyRequests /> },
 
   // this route should be at the end of all other routes
   {
