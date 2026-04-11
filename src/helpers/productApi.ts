@@ -26,6 +26,15 @@ export interface Product {
   pricePoints: number;
   quantity: number;
   images: ProductImage[];
+  productType?: "NORMAL" | "LUCKY_DRAW";
+}
+
+export interface LuckyDrawResult {
+  code: number;
+  msg: string;
+  data: {
+    productId: number;
+  };
 }
 
 export interface ProductsPage {
@@ -128,12 +137,19 @@ export interface ApiResult {
   data?: any;
 }
 
+export interface RewardPayload {
+  rewardProductId: number;
+  weight: number;
+}
+
 export interface ProductPayload {
   name: string;
   description: string;
   priceWallet: number;
   pricePoints: number;
   quantity: number;
+  productType?: "NORMAL" | "LUCKY_DRAW";
+  rewards?: RewardPayload[];
 }
 
 export interface Address {
@@ -180,8 +196,107 @@ export const getProducts = async (page = 0, size = 9): Promise<ProductsResponse>
   return res.json();
 };
 
+export const getNormalProducts = async (page = 0, size = 9): Promise<ProductsResponse> => {
+  const res = await fetch(`${PRODUCT_BASE}/normal?page=${page}&size=${size}`, {
+    headers: authHeaders(),
+  });
+  return res.json();
+};
+
+export const getLuckyDrawProducts = async (page = 0, size = 50): Promise<ProductsResponse> => {
+  const res = await fetch(`${PRODUCT_BASE}/lucky-draw-list?page=${page}&size=${size}`, {
+    headers: authHeaders(),
+  });
+  return res.json();
+};
+
 export const getProductById = async (id: number): Promise<ProductResponse> => {
   const res = await fetch(`${PRODUCT_BASE}/${id}`, { headers: authHeaders() });
+  return res.json();
+};
+
+// ── Lucky Draw User APIs ──────────────────────────────────────────────────────
+
+export interface UserLuckyDrawItem {
+  id: number;
+  productId: number;
+  name: string;
+  image: string;
+  weight: number;
+}
+
+export interface UserLuckyDrawItemsResponse {
+  code: number;
+  msg: string;
+  data: UserLuckyDrawItem[];
+}
+
+export const getUserLuckyDrawItems = async (productId: number): Promise<UserLuckyDrawItemsResponse> => {
+  const res = await fetch(`${PRODUCT_BASE}/lucky-draw/${productId}/items`, { headers: authHeaders() });
+  return res.json();
+};
+
+// ── Lucky Draw Admin APIs ─────────────────────────────────────────────────────
+
+export interface LuckyDrawItem {
+  id: number;
+  rewardProductId: number;
+  weight: number;
+}
+
+export interface LuckyDrawItemsResponse {
+  code: number;
+  msg: string;
+  data: LuckyDrawItem[];
+}
+
+export const getLuckyDrawItems = async (productId: number): Promise<LuckyDrawItemsResponse> => {
+  const res = await fetch(`${ADMIN_BASE}/${productId}/lucky-draw-items`, { headers: authHeaders() });
+  return res.json();
+};
+
+export const addLuckyDrawItem = async (
+  productId: number,
+  rewardProductId: number,
+  weight: number
+): Promise<ApiResult> => {
+  const params = new URLSearchParams({
+    rewardProductId: String(rewardProductId),
+    weight: String(weight),
+  });
+  const res = await fetch(`${ADMIN_BASE}/${productId}/lucky-draw-items?${params}`, {
+    method: "POST",
+    headers: authHeaders(),
+  });
+  return res.json();
+};
+
+export const updateLuckyDrawItem = async (itemId: number, weight: number): Promise<ApiResult> => {
+  const params = new URLSearchParams({ weight: String(weight) });
+  const res = await fetch(`${ADMIN_BASE}/lucky-draw-items/${itemId}?${params}`, {
+    method: "PUT",
+    headers: authHeaders(),
+  });
+  return res.json();
+};
+
+export const deleteLuckyDrawItem = async (itemId: number): Promise<ApiResult> => {
+  const res = await fetch(`${ADMIN_BASE}/lucky-draw-items/${itemId}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
+  return res.json();
+};
+
+export const joinLuckyDraw = async (
+  productId: number,
+  redeemType: "POINT" | "WALLET"
+): Promise<LuckyDrawResult> => {
+  const res = await fetch(`${PRODUCT_BASE}/lucky-draw`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ productId, redeemType }),
+  });
   return res.json();
 };
 

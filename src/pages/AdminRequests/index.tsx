@@ -527,7 +527,7 @@ const DetailModal: React.FC<{
               Request <span className="text-primary">#{req.id}</span>
             </span>
             <StatusBadge status={req.status} />
-            {isBank && req.paymentStatus && <PaymentStatusBadge status={req.paymentStatus} />}
+            {req.paymentStatus && <PaymentStatusBadge status={req.paymentStatus} />}
           </div>
         </ModalHeader>
 
@@ -541,7 +541,7 @@ const DetailModal: React.FC<{
               <SectionCard icon="ri-file-list-3-line" title="Request Information">
                 <InfoRow label="Request ID"   value={<span className="fw-semibold">#{req.id}</span>} />
                 <InfoRow label="Status"       value={<StatusBadge status={req.status} />} />
-                {isBank && (
+                {req.paymentStatus && (
                   <InfoRow label="Payment Status" value={<PaymentStatusBadge status={req.paymentStatus} />} />
                 )}
                 <InfoRow label="Redeem Type"  value={
@@ -1231,7 +1231,7 @@ const AdminRequests = () => {
                             <td><StatusBadge status={req.status} /></td>
 
                             <td>
-                              {req.redeemType === "BANK_TRANSFER"
+                              {req.paymentStatus
                                 ? <PaymentStatusBadge status={req.paymentStatus} />
                                 : <span className="text-muted fs-13">—</span>
                               }

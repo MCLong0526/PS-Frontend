@@ -91,6 +91,12 @@ const Navdata = () => {
                 link: "/products",
             },
             {
+                id: "lucky-draw",
+                label: "Lucky Draw",
+                icon: "ri-gift-2-line",
+                link: "/lucky-draw",
+            },
+            {
                 id: "my-requests",
                 label: "My Requests",
                 icon: "ri-list-check-2",

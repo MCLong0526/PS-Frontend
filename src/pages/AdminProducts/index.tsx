@@ -9,7 +9,9 @@ import * as Yup from "yup";
 import { useFormik } from "formik";
 import {
   getProducts, adminCreateProduct, adminUpdateProduct, adminDeleteProduct,
-  adminUploadProductImage, adminDeleteProductImage, Product,
+  adminUploadProductImage, adminDeleteProductImage,
+  getLuckyDrawItems, addLuckyDrawItem, updateLuckyDrawItem, deleteLuckyDrawItem,
+  Product, LuckyDrawItem,
 } from "../../helpers/productApi";
 import { showToast } from "../../helpers/appToast";
 
@@ -188,6 +190,360 @@ const ImageSection: React.FC<ImageSectionProps> = ({
   );
 };
 
+// ── Reward Config types & component ──────────────────────────────────────────
+
+interface PendingReward {
+  tempKey: string;
+  product: Product;
+  weight: number;
+}
+
+interface RewardItem extends LuckyDrawItem {
+  product?: Product;
+  editingWeight: string | null;
+  saving: boolean;
+  deleting: boolean;
+}
+
+const RewardConfigSection: React.FC<{
+  productId?: number;
+  normalProducts: Product[];
+  pendingRewards: PendingReward[];
+  onPendingChange: (r: PendingReward[]) => void;
+  validationError?: string;
+}> = ({ productId, normalProducts, pendingRewards, onPendingChange, validationError }) => {
+  const isCreateMode = !productId;
+
+  const [items, setItems]               = useState<RewardItem[]>([]);
+  const [itemsLoading, setItemsLoading] = useState(false);
+  const [addSelId, setAddSelId]         = useState<string>("");
+  const [addWeight, setAddWeight]       = useState<string>("");
+  const [adding, setAdding]             = useState(false);
+
+  // Load existing items in edit mode
+  useEffect(() => {
+    if (isCreateMode) return;
+    setItemsLoading(true);
+    getLuckyDrawItems(productId!).then((res) => {
+      if (res.code === 200 && Array.isArray(res.data)) {
+        setItems(res.data.map((item) => ({
+          ...item,
+          product: normalProducts.find((p) => p.id === item.rewardProductId),
+          editingWeight: null,
+          saving: false,
+          deleting: false,
+        })));
+      }
+    }).catch(() => {}).finally(() => setItemsLoading(false));
+  }, [productId, isCreateMode, normalProducts]);
+
+  // Products already used (prevent duplicates)
+  const usedIds = new Set(
+    isCreateMode
+      ? pendingRewards.map((r) => r.product.id)
+      : items.map((i) => i.rewardProductId)
+  );
+  const availableProducts = normalProducts.filter((p) => !usedIds.has(p.id));
+
+  // ── Add handler ──────────────────────────────────────────────────────────────
+
+  const handleAdd = async () => {
+    const selId = Number(addSelId);
+    const weight = Number(addWeight);
+    if (!selId || weight <= 0) return;
+    const product = normalProducts.find((p) => p.id === selId);
+    if (!product) return;
+
+    if (isCreateMode) {
+      onPendingChange([
+        ...pendingRewards,
+        { tempKey: `${Date.now()}-${Math.random()}`, product, weight },
+      ]);
+      setAddSelId(""); setAddWeight("");
+    } else {
+      setAdding(true);
+      try {
+        const res = await addLuckyDrawItem(productId!, selId, weight);
+        if (res.code === 200) {
+          setItems((prev) => [
+            ...prev,
+            {
+              id: res.data?.id ?? Date.now(),
+              rewardProductId: selId,
+              weight,
+              product,
+              editingWeight: null,
+              saving: false,
+              deleting: false,
+            },
+          ]);
+          setAddSelId(""); setAddWeight("");
+          showToast.success("Reward added");
+        } else {
+          showToast.error(res.msg || "Failed to add reward");
+        }
+      } catch { showToast.error("Network error"); }
+      finally { setAdding(false); }
+    }
+  };
+
+  // ── Edit weight (edit mode) ───────────────────────────────────────────────────
+
+  const startEdit  = (id: number) =>
+    setItems((prev) => prev.map((i) => i.id === id ? { ...i, editingWeight: String(i.weight) } : i));
+
+  const cancelEdit = (id: number) =>
+    setItems((prev) => prev.map((i) => i.id === id ? { ...i, editingWeight: null } : i));
+
+  const saveEdit = async (item: RewardItem) => {
+    const weight = Number(item.editingWeight);
+    if (!weight || weight <= 0) return;
+    setItems((prev) => prev.map((i) => i.id === item.id ? { ...i, saving: true } : i));
+    try {
+      const res = await updateLuckyDrawItem(item.id, weight);
+      if (res.code === 200) {
+        setItems((prev) => prev.map((i) =>
+          i.id === item.id ? { ...i, weight, editingWeight: null, saving: false } : i
+        ));
+        showToast.success("Weight updated");
+      } else {
+        showToast.error(res.msg || "Failed to update");
+        setItems((prev) => prev.map((i) => i.id === item.id ? { ...i, saving: false } : i));
+      }
+    } catch {
+      showToast.error("Network error");
+      setItems((prev) => prev.map((i) => i.id === item.id ? { ...i, saving: false } : i));
+    }
+  };
+
+  // ── Delete (edit mode) ────────────────────────────────────────────────────────
+
+  const handleDelete = async (id: number) => {
+    setItems((prev) => prev.map((i) => i.id === id ? { ...i, deleting: true } : i));
+    try {
+      const res = await deleteLuckyDrawItem(id);
+      if (res.code === 200) {
+        setItems((prev) => prev.filter((i) => i.id !== id));
+        showToast.success("Reward removed");
+      } else {
+        showToast.error(res.msg || "Failed to delete");
+        setItems((prev) => prev.map((i) => i.id === id ? { ...i, deleting: false } : i));
+      }
+    } catch {
+      showToast.error("Network error");
+      setItems((prev) => prev.map((i) => i.id === id ? { ...i, deleting: false } : i));
+    }
+  };
+
+  // ── Pending reward helpers (create mode) ─────────────────────────────────────
+
+  const removePending = (key: string) =>
+    onPendingChange(pendingRewards.filter((r) => r.tempKey !== key));
+
+  const updatePendingWeight = (key: string, w: number) =>
+    onPendingChange(pendingRewards.map((r) => r.tempKey === key ? { ...r, weight: w } : r));
+
+  // ── Render ───────────────────────────────────────────────────────────────────
+
+  const rows = isCreateMode
+    ? pendingRewards.map((r) => ({ key: r.tempKey, product: r.product, weight: r.weight, serverItem: null as RewardItem | null }))
+    : items.map((i)         => ({ key: String(i.id), product: i.product, weight: i.weight, serverItem: i }));
+
+  const totalWeight = rows.reduce((sum, r) => sum + (Number(r.weight) || 0), 0);
+
+  return (
+    <div>
+      {/* Validation error */}
+      {validationError && (
+        <div className="alert alert-danger py-2 px-3 mb-3 d-flex align-items-center gap-2" style={{ fontSize: 13 }}>
+          <i className="ri-error-warning-fill flex-shrink-0" />
+          {validationError}
+        </div>
+      )}
+
+      {itemsLoading ? (
+        <div className="text-center py-3"><Spinner size="sm" color="warning" /></div>
+      ) : (
+        <>
+          {/* Reward table */}
+          {rows.length > 0 ? (
+            <>
+              <div className="table-responsive mb-2">
+                <table className="table table-sm table-bordered align-middle mb-0">
+                  <thead className="table-light">
+                    <tr>
+                      <th style={{ width: 48 }}></th>
+                      <th>Product</th>
+                      <th style={{ width: 150 }}>Weight</th>
+                      <th style={{ width: 80 }}>Chance</th>
+                      <th style={{ width: 96 }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map(({ key, product, weight, serverItem }) => {
+                      const img     = product?.images?.[0]?.imageUrl;
+                      const pct     = totalWeight > 0 ? ((Number(weight) / totalWeight) * 100).toFixed(1) : "0.0";
+                      return (
+                        <tr key={key}>
+                          {/* Image */}
+                          <td className="text-center">
+                            {img ? (
+                              <img src={img} alt="" style={{ width: 34, height: 34, objectFit: "contain", borderRadius: 4 }} />
+                            ) : (
+                              <div className="d-flex align-items-center justify-content-center bg-light rounded mx-auto" style={{ width: 34, height: 34 }}>
+                                <i className="ri-image-line text-muted" style={{ fontSize: 15 }} />
+                              </div>
+                            )}
+                          </td>
+
+                          {/* Name */}
+                          <td>
+                            <div className="fw-medium" style={{ fontSize: 13 }}>
+                              {product?.name ?? `Product #${serverItem?.rewardProductId ?? ""}`}
+                            </div>
+                            {product && (
+                              <div className="text-muted" style={{ fontSize: 11 }}>{product.quantity} in stock</div>
+                            )}
+                          </td>
+
+                          {/* Weight */}
+                          <td>
+                            {isCreateMode ? (
+                              <Input
+                                type="number" min="1" bsSize="sm"
+                                value={weight}
+                                onChange={(e) => updatePendingWeight(key, Number(e.target.value))}
+                                style={{ width: 80 }}
+                              />
+                            ) : serverItem?.editingWeight !== null ? (
+                              <div className="d-flex gap-1 align-items-center">
+                                <Input
+                                  type="number" min="1" bsSize="sm"
+                                  value={serverItem!.editingWeight ?? ""}
+                                  onChange={(e) =>
+                                    setItems((prev) => prev.map((i) =>
+                                      i.id === serverItem!.id ? { ...i, editingWeight: e.target.value } : i
+                                    ))
+                                  }
+                                  style={{ width: 70 }}
+                                  disabled={serverItem!.saving}
+                                />
+                                <Button color="success" size="sm" onClick={() => saveEdit(serverItem!)} disabled={serverItem!.saving} style={{ padding: "2px 6px" }}>
+                                  {serverItem!.saving ? <Spinner size="sm" /> : <i className="ri-check-line" />}
+                                </Button>
+                                <Button color="light" size="sm" onClick={() => cancelEdit(serverItem!.id)} disabled={serverItem!.saving} style={{ padding: "2px 6px" }}>
+                                  <i className="ri-close-line" />
+                                </Button>
+                              </div>
+                            ) : (
+                              <span className="badge bg-warning-subtle text-warning fw-semibold px-2 py-1" style={{ fontSize: 12 }}>
+                                {weight}
+                              </span>
+                            )}
+                          </td>
+
+                          {/* Chance % */}
+                          <td>
+                            <span className="badge bg-primary-subtle text-primary fw-semibold px-2 py-1" style={{ fontSize: 11 }}>
+                              {pct}%
+                            </span>
+                          </td>
+
+                          {/* Actions */}
+                          <td>
+                            {isCreateMode ? (
+                              <Button color="danger" size="sm" outline onClick={() => removePending(key)} style={{ padding: "2px 8px" }}>
+                                <i className="ri-delete-bin-line" />
+                              </Button>
+                            ) : (
+                              <div className="d-flex gap-1">
+                                {serverItem?.editingWeight === null && (
+                                  <Button color="primary" size="sm" outline onClick={() => startEdit(serverItem!.id)} disabled={serverItem?.deleting} style={{ padding: "2px 6px" }}>
+                                    <i className="ri-edit-line" />
+                                  </Button>
+                                )}
+                                <Button color="danger" size="sm" outline onClick={() => handleDelete(serverItem!.id)} disabled={serverItem?.deleting || serverItem?.saving} style={{ padding: "2px 6px" }}>
+                                  {serverItem?.deleting ? <Spinner size="sm" /> : <i className="ri-delete-bin-line" />}
+                                </Button>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Total weight summary */}
+              <div
+                className="d-flex align-items-center gap-3 px-3 py-2 rounded mb-3"
+                style={{ background: "var(--vz-warning-bg-subtle)", border: "1px solid var(--vz-warning-border-subtle)" }}
+              >
+                <i className="ri-scales-3-line text-warning" style={{ fontSize: 16 }} />
+                <span className="fw-semibold text-warning" style={{ fontSize: 13 }}>
+                  Total Weight: {totalWeight}
+                </span>
+                <span className="text-muted ms-auto" style={{ fontSize: 12 }}>
+                  {rows.length} reward{rows.length !== 1 ? "s" : ""}
+                </span>
+              </div>
+            </>
+          ) : (
+            <div
+              className="text-center py-3 text-muted rounded mb-3"
+              style={{
+                fontSize: 13,
+                border: `2px dashed ${validationError ? "#f06548" : "var(--vz-border-color)"}`,
+                background: validationError ? "#fff5f3" : "transparent",
+              }}
+            >
+              <i className="ri-gift-2-line d-block mb-1 fs-3 opacity-25" />
+              No rewards configured yet
+            </div>
+          )}
+
+          {/* Add reward row */}
+          {availableProducts.length > 0 ? (
+            <div className="border rounded p-3" style={{ background: "var(--vz-secondary-bg)" }}>
+              <p className="fw-medium mb-2" style={{ fontSize: 13 }}>
+                <i className="ri-add-circle-line me-1 text-success" />Add Reward Product
+              </p>
+              <Row className="g-2 align-items-end">
+                <Col>
+                  <Label className="form-label mb-1" style={{ fontSize: 12 }}>Product</Label>
+                  <Input type="select" bsSize="sm" value={addSelId} onChange={(e) => setAddSelId(e.target.value)} disabled={adding}>
+                    <option value="">-- Select product --</option>
+                    {availableProducts.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}  (qty: {p.quantity})
+                      </option>
+                    ))}
+                  </Input>
+                </Col>
+                <Col xs="auto" style={{ minWidth: 110 }}>
+                  <Label className="form-label mb-1" style={{ fontSize: 12 }}>Weight</Label>
+                  <Input type="number" bsSize="sm" min="1" placeholder="e.g. 50" value={addWeight} onChange={(e) => setAddWeight(e.target.value)} disabled={adding} />
+                </Col>
+                <Col xs="auto">
+                  <Button color="success" size="sm" onClick={handleAdd} disabled={adding || !addSelId || Number(addWeight) <= 0}>
+                    {adding ? <Spinner size="sm" /> : <><i className="ri-add-line me-1" />Add</>}
+                  </Button>
+                </Col>
+              </Row>
+            </div>
+          ) : (
+            <p className="text-muted mb-0" style={{ fontSize: 12 }}>
+              <i className="ri-information-line me-1 text-info" />
+              All available normal products have been added as rewards.
+            </p>
+          )}
+        </>
+      )}
+    </div>
+  );
+};
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 const AdminProducts = () => {
@@ -205,6 +561,26 @@ const AdminProducts = () => {
   const [page, setPage]                     = useState(0);
   const [totalPages, setTotalPages]         = useState(0);
   const [totalElements, setTotalElements]   = useState(0);
+  const [typeFilter, setTypeFilter]         = useState<"ALL" | "NORMAL" | "LUCKY_DRAW">("ALL");
+
+  // Normal products (for reward selector)
+  const [normalProducts, setNormalProducts] = useState<Product[]>([]);
+
+  const fetchNormalProducts = useCallback(async () => {
+    try {
+      const res = await getProducts(0, 100);
+      if (res.code === 200 && res.data?.content) {
+        setNormalProducts(res.data.content.filter(
+          (p) => !p.productType || p.productType === "NORMAL"
+        ));
+      }
+    } catch { /* silent */ }
+  }, []);
+
+  // Pending rewards for create mode
+  const [pendingRewards, setPendingRewards]               = useState<PendingReward[]>([]);
+  const pendingRewardsRef                                 = useRef<PendingReward[]>([]);
+  const [rewardValidationError, setRewardValidationError] = useState<string>("");
 
   // Form modal
   const [formOpen, setFormOpen]       = useState(false);
@@ -336,6 +712,7 @@ const AdminProducts = () => {
       priceWallet: editProduct?.priceWallet ?? "",
       pricePoints: editProduct?.pricePoints ?? "",
       quantity:    editProduct?.quantity    ?? "",
+      productType: (editProduct?.productType ?? "NORMAL") as "NORMAL" | "LUCKY_DRAW",
     },
     validationSchema: Yup.object({
       name:        Yup.string().required("Name is required"),
@@ -344,6 +721,16 @@ const AdminProducts = () => {
       quantity:    Yup.number().typeError("Enter a number").min(0, "Must be ≥ 0").required("Required"),
     }),
     onSubmit: async (values) => {
+      // Read from ref — avoids stale closure capturing the initial empty []
+      const currentRewards = pendingRewardsRef.current;
+
+      // Validate: Lucky Draw must have at least one reward (create mode only)
+      if (!editProduct && values.productType === "LUCKY_DRAW" && currentRewards.length === 0) {
+        setRewardValidationError("At least one reward product is required for a Lucky Draw.");
+        document.getElementById("reward-config-section")?.scrollIntoView({ behavior: "smooth", block: "center" });
+        return;
+      }
+      setRewardValidationError("");
       setFormLoading(true);
       try {
         const payload = {
@@ -352,6 +739,14 @@ const AdminProducts = () => {
           priceWallet: Number(values.priceWallet),
           pricePoints: Number(values.pricePoints),
           quantity:    Number(values.quantity),
+          productType: values.productType,
+          // Embed rewards directly in create payload for LUCKY_DRAW
+          ...(!editProduct && values.productType === "LUCKY_DRAW" && {
+            rewards: currentRewards.map((r) => ({
+              rewardProductId: r.product.id,
+              weight: r.weight,
+            })),
+          }),
         };
 
         const res = editProduct
@@ -359,18 +754,18 @@ const AdminProducts = () => {
           : await adminCreateProduct(payload);
 
         if (res.code === 200) {
+          const newId = res.data?.id;
           // Upload queued images for new products
-          if (!editProduct && pendingImages.length > 0) {
-            const newId = res.data?.id;
-            if (newId) {
-              for (const img of pendingImages) {
-                if (img.file) {
-                  try { await adminUploadProductImage(newId, img.file); } catch { /* skip */ }
-                }
+          if (!editProduct && pendingImages.length > 0 && newId) {
+            for (const img of pendingImages) {
+              if (img.file) {
+                try { await adminUploadProductImage(newId, img.file); } catch { /* skip */ }
               }
             }
           }
           cleanupPendingImages(pendingImages);
+          setPendingRewards([]);
+          pendingRewardsRef.current = [];
           showToast.success(editProduct ? "Product updated" : "Product created");
           setFormOpen(false);
           loadProducts(page);
@@ -389,13 +784,26 @@ const AdminProducts = () => {
     cleanupPendingImages(pendingImages);
     setEditProduct(null);
     setPendingImages([]);
+    setPendingRewards([]);
+    pendingRewardsRef.current = [];
+    setRewardValidationError("");
     formik.resetForm();
     setFormOpen(true);
+    fetchNormalProducts();
   };
 
   const closeFormModal = () => {
     cleanupPendingImages(pendingImages);
+    setPendingRewards([]);
+    pendingRewardsRef.current = [];
+    setRewardValidationError("");
     setFormOpen(false);
+  };
+
+  const handlePendingRewardsChange = (rewards: PendingReward[]) => {
+    setPendingRewards(rewards);
+    pendingRewardsRef.current = rewards;
+    if (rewards.length > 0) setRewardValidationError("");
   };
 
   const openEdit = (p: Product) => {
@@ -406,6 +814,7 @@ const AdminProducts = () => {
       imageId: img.id,
     })));
     setFormOpen(true);
+    fetchNormalProducts();
   };
 
   // ── Delete ────────────────────────────────────────────────────────────────────
@@ -464,19 +873,38 @@ const AdminProducts = () => {
           <Row>
             <Col lg={12}>
               <Card>
-                <CardHeader className="d-flex align-items-center border-bottom-dashed">
-                  <h5 className="card-title mb-0 flex-grow-1">
-                    <i className="ri-store-2-line me-2 text-primary align-middle"></i>
-                    Products
-                    {totalElements > 0 && (
-                      <span className="badge bg-primary-subtle text-primary ms-2 fs-12">
-                        {totalElements}
-                      </span>
-                    )}
-                  </h5>
-                  <Button color="primary" size="sm" onClick={openCreate}>
-                    <i className="ri-add-line me-1"></i>Add Product
-                  </Button>
+                <CardHeader className="border-bottom-dashed">
+                  <div className="d-flex align-items-center mb-3">
+                    <h5 className="card-title mb-0 flex-grow-1">
+                      <i className="ri-store-2-line me-2 text-primary align-middle"></i>
+                      Products
+                      {totalElements > 0 && (
+                        <span className="badge bg-primary-subtle text-primary ms-2 fs-12">
+                          {totalElements}
+                        </span>
+                      )}
+                    </h5>
+                    <Button color="primary" size="sm" onClick={openCreate}>
+                      <i className="ri-add-line me-1"></i>Add Product
+                    </Button>
+                  </div>
+
+                  {/* Type filter tabs */}
+                  <div className="d-flex gap-2 flex-wrap">
+                    {(["ALL", "NORMAL", "LUCKY_DRAW"] as const).map((t) => (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => { setTypeFilter(t); setPage(0); loadProducts(0); }}
+                        className={`btn btn-sm ${typeFilter === t ? "btn-primary" : "btn-outline-primary"}`}
+                        style={{ borderRadius: 20, fontSize: 12 }}
+                      >
+                        {t === "ALL" && <><i className="ri-apps-line me-1" />All</>}
+                        {t === "NORMAL" && <><i className="ri-store-2-line me-1" />Normal</>}
+                        {t === "LUCKY_DRAW" && <><i className="ri-gift-2-line me-1" />Lucky Draw</>}
+                      </button>
+                    ))}
+                  </div>
                 </CardHeader>
 
                 <CardBody>
@@ -493,9 +921,12 @@ const AdminProducts = () => {
                   ) : (
                     <>
                       <Row className="g-4">
-                        {products.map((prod) => {
-                          const firstImg = prod.images?.[0]?.imageUrl;
-                          const inStock  = prod.quantity > 0;
+                        {products
+                          .filter((p) => typeFilter === "ALL" || p.productType === typeFilter || (typeFilter === "NORMAL" && !p.productType))
+                          .map((prod) => {
+                          const firstImg    = prod.images?.[0]?.imageUrl;
+                          const inStock     = prod.quantity > 0;
+                          const isLuckyDraw = prod.productType === "LUCKY_DRAW";
                           return (
                             <Col key={prod.id} xl={4} md={6} xs={12}>
                               <div
@@ -537,6 +968,21 @@ const AdminProducts = () => {
                                     >
                                       <i className="ri-image-line me-1"></i>
                                       {prod.images.length}
+                                    </span>
+                                  )}
+
+                                  {/* Lucky Draw badge */}
+                                  {isLuckyDraw && (
+                                    <span
+                                      className="position-absolute badge"
+                                      style={{
+                                        top: 8, left: 8, fontSize: 10, borderRadius: 20,
+                                        background: "linear-gradient(135deg, #f7b84b, #f06548)",
+                                        color: "#fff",
+                                      }}
+                                    >
+                                      <i className="ri-gift-2-fill me-1" style={{ fontSize: 9 }} />
+                                      Lucky Draw
                                     </span>
                                   )}
                                 </div>
@@ -692,6 +1138,44 @@ const AdminProducts = () => {
               </p>
               <Row className="g-3">
 
+                {/* Product Type selector */}
+                <Col md={12}>
+                  <Label className="form-label">Product Type</Label>
+                  <div className="d-flex gap-3">
+                    {(["NORMAL", "LUCKY_DRAW"] as const).map((t) => (
+                      <div
+                        key={t}
+                        onClick={() => formik.setFieldValue("productType", t)}
+                        className="flex-grow-1 text-center p-3 rounded-3"
+                        style={{
+                          cursor: "pointer",
+                          border: formik.values.productType === t
+                            ? t === "LUCKY_DRAW" ? "2px solid #f7b84b" : "2px solid #405189"
+                            : "2px solid var(--vz-border-color)",
+                          background: formik.values.productType === t
+                            ? t === "LUCKY_DRAW" ? "var(--vz-warning-bg-subtle)" : "var(--vz-primary-bg-subtle)"
+                            : "transparent",
+                          transition: "all 0.2s",
+                        }}
+                      >
+                        <i
+                          className={t === "LUCKY_DRAW" ? "ri-gift-2-fill text-warning" : "ri-store-2-fill text-primary"}
+                          style={{ fontSize: 22 }}
+                        />
+                        <div
+                          className={`fw-semibold mt-1 ${t === "LUCKY_DRAW" ? "text-warning" : "text-primary"}`}
+                          style={{ fontSize: 13 }}
+                        >
+                          {t === "LUCKY_DRAW" ? "Lucky Draw" : "Normal"}
+                        </div>
+                        <div className="text-muted" style={{ fontSize: 11 }}>
+                          {t === "LUCKY_DRAW" ? "Reward pool product" : "Standard product"}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </Col>
+
                 <Col md={12}>
                   <Label className="form-label">Name <span className="text-danger">*</span></Label>
                   <Input
@@ -789,7 +1273,7 @@ const AdminProducts = () => {
             </div>
 
             {/* ── Image section ────────────────────────────────────────────── */}
-            <div className="p-4">
+            <div className="p-4 border-bottom">
               <p className="text-muted fs-11 text-uppercase fw-medium mb-3">
                 <i className="ri-image-line me-1"></i>Product Images
               </p>
@@ -807,6 +1291,25 @@ const AdminProducts = () => {
                 isCreateMode={!editProduct}
               />
             </div>
+
+            {/* ── Reward configuration (Lucky Draw only) ───────────────────── */}
+            {formik.values.productType === "LUCKY_DRAW" && (
+              <div className="p-4" id="reward-config-section">
+                <p className="text-muted fs-11 text-uppercase fw-medium mb-3">
+                  <i className="ri-gift-2-line me-1"></i>Reward Configuration
+                  {!editProduct && (
+                    <span className="text-danger ms-1">*</span>
+                  )}
+                </p>
+                <RewardConfigSection
+                  productId={editProduct?.id}
+                  normalProducts={normalProducts}
+                  pendingRewards={pendingRewards}
+                  onPendingChange={handlePendingRewardsChange}
+                  validationError={rewardValidationError}
+                />
+              </div>
+            )}
 
           </Form>
         </ModalBody>

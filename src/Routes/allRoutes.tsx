@@ -47,6 +47,7 @@ import Products from "../pages/Products";
 import MyRequests from "../pages/MyRequests";
 import AdminProducts from "../pages/AdminProducts";
 import AdminRequests from "../pages/AdminRequests";
+import LuckyDraw from "../pages/LuckyDraw";
 
 const authProtectedRoutes = [
   // dashboard
@@ -65,6 +66,7 @@ const authProtectedRoutes = [
   // Customer
   { path: "/products",        component: <Products /> },
   { path: "/my-requests",     component: <MyRequests /> },
+  { path: "/lucky-draw",      component: <LuckyDraw /> },
 
   // this route should be at the end of all other routes
   {

@@ -5,7 +5,7 @@ import {
   Button, Spinner, Input, InputGroup, FormGroup, Label,
 } from "reactstrap";
 import {
-  getProducts, redeemProduct, getAddresses, createAddress,
+  getNormalProducts, redeemProduct, getAddresses, createAddress,
   Product, Address, AddressPayload,
 } from "../../helpers/productApi";
 import {
@@ -787,7 +787,7 @@ const Products = () => {
   const loadProducts = useCallback(async (p: number, ps: number) => {
     setLoading(true);
     try {
-      const res = await getProducts(p, ps);
+      const res = await getNormalProducts(p, ps);
       if (res.code === 200) {
         setProducts(res.data?.content ?? []);
         setTotalPages(res.data?.totalPages ?? 0);
